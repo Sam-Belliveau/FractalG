@@ -1,13 +1,8 @@
 #include <SFML/Graphics.hpp>
 #include <gmp.h>
 
-const unsigned int w = 720, h = 480;
-const unsigned int p = 256;
-double scale = 1;
-double ox = 0;
-double oy = 0;
-double px = 0;
-double py = 0;
+const unsigned int w = 640, h = 480;
+const unsigned int p = 128;
 
 static mpf_t x, y, zoom, bail;
 
@@ -21,11 +16,11 @@ const unsigned char b[colors] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x
 struct pixel
 {
     unsigned int iteration;
-    int state; mpf_t cr, ci, zr, zi;
+    bool done; mpf_t cr, ci, zr, zi;
 
     pixel()
     {
-        iteration = 0; state = 0;
+        iteration = 0; done = false;
         mpf_init2(cr,p); mpf_init2(ci,p);
         mpf_init2(zr,p); mpf_init2(zi,p);
     }
@@ -57,9 +52,9 @@ void resetNums()
         {
             mpf_set(nums[i].cr, px); mpf_set(nums[i].ci, py);
             mpf_set(nums[i].zr, px); mpf_set(nums[i].zi, py);
-            nums[i].iteration = 0; nums[i].state = 0;
+            nums[i].iteration = 0; nums[i].done = false;
             pixels[i*4 + 0] = 0; pixels[i*4 + 1] = 0;
-            pixels[i*4 + 2] = 0; pixels[i*4 + 3] = 8;
+            pixels[i*4 + 2] = 0; pixels[i*4 + 3] = 16;
             mpf_add(px, px, xIter); i++;
         } mpf_add(py, py, yIter);
     }
@@ -69,7 +64,7 @@ void resetNums()
 /** MATH START **/
 void iterate(pixel &temp)
 {
-    if(temp.state != 0) { return; }
+    if(temp.done) { return; }
 
     mpf_t sqzr, sqzi, comp;
     mpf_init2(sqzr, p); mpf_init2(sqzi, p); mpf_init2(comp, p);
@@ -85,7 +80,7 @@ void iterate(pixel &temp)
     mpf_mul(sqzi, temp.zi, temp.zi); /// sqzi = zi*zi
     mpf_add(comp, sqzr, sqzi); /// Adding squares for compairison
 
-    if(mpf_cmp(comp, bail) > 0) { temp.state = 1; }
+    if(mpf_cmp(comp, bail) > 0) { temp.done = true; }
     else { temp.iteration++; }
 
     mpf_clear(sqzr); mpf_clear(sqzi); mpf_clear(comp);
@@ -99,7 +94,7 @@ void drawFract(const unsigned int threadNum)
         iterate(nums[pix]);
 
         const unsigned int counter = pix << 2;
-        if(nums[pix].state == 1)
+        if(nums[pix].done)
         {
             if(!draw) { draw = true; }
 
@@ -108,8 +103,6 @@ void drawFract(const unsigned int threadNum)
             pixels[counter + 1] = g[ii];
             pixels[counter + 2] = b[ii];
             pixels[counter + 3] = 255;
-
-            nums[pix].state = 2;
         }
     }
 }
@@ -127,7 +120,7 @@ void reset(){ mpf_set_d(x,-1.5); mpf_set_d(y,0); mpf_set_d(zoom,2); }
 int main()
 {
     mpf_init2(bail, p);
-    mpf_set_ui(bail, 4);
+    mpf_set_ui(bail, 256);
 
     mpf_init2(x, p);
     mpf_init2(y, p);
@@ -135,7 +128,7 @@ int main()
 
     sf::Texture texture;
     texture.create(w,h);
-    texture.setSmooth(false);
+    texture.setSmooth(true);
     sf::Sprite sprite(texture);
 
     sf::Thread  bot0(drawFract,0), bot1(drawFract,1),
@@ -159,7 +152,6 @@ int main()
                 app.close();
         }
 
-        draw = false;
         if(sf::Mouse::isButtonPressed(sf::Mouse::Left))
         {
             mpf_t modx, mody;
@@ -183,34 +175,30 @@ int main()
             mpf_set_ui(mody, h);
             mpf_div_ui(mody, mody, 2);
 
-            ox -= (ox - mpf_get_d(tx))/scale;
-            oy -= (oy - mpf_get_d(ty))/scale;
-
-            px = mpf_get_d(tx);
-            py = mpf_get_d(ty);
+            sprite.setOrigin(mpf_get_d(tx), mpf_get_d(ty));
+            sprite.setPosition(mpf_get_d(tx), mpf_get_d(ty));
 
             mpf_sub(tx, tx, modx); mpf_sub(ty, ty, mody);
             mpf_mul(tx, tx, zoom); mpf_mul(ty, ty, zoom);
             mpf_div(tx, tx, modx); mpf_div(ty, ty, mody);
             if(sf::Keyboard::isKeyPressed(sf::Keyboard::LShift))
             {
-                scale /= 2;
-                mpf_set_d(zmod, -1);
+                sprite.setScale(0.25,0.25);
+                mpf_set_d(zmod, -3);
                 mpf_mul(tx,tx,zmod);
                 mpf_mul(ty,ty,zmod);
                 mpf_add(x,x,tx);
                 mpf_add(y,y,ty);
-
-                mpf_mul_ui(zoom, zoom, 2);
+                mpf_mul_ui(zoom, zoom, 4);
             } else
             {
-                scale *= 2;
-                mpf_set_d(zmod, 1.f/2.f);
+                sprite.setScale(4,4);
+                mpf_set_d(zmod, 3.f/4.f);
                 mpf_mul(tx,tx,zmod);
                 mpf_mul(ty,ty,zmod);
                 mpf_add(x,x,tx);
                 mpf_add(y,y,ty);
-                mpf_div_ui(zoom, zoom, 2);
+                mpf_div_ui(zoom, zoom, 4);
             }
             draw = false;
             mpf_clear(modx); mpf_clear(mody);
@@ -219,9 +207,6 @@ int main()
             mpf_clear(ratio);
 
             app.clear();
-            sprite.setOrigin(ox, oy);
-            sprite.setPosition(ox, oy);
-            sprite.setScale(scale,scale);
             app.draw(sprite);
             app.display();
 
@@ -230,15 +215,13 @@ int main()
         if(sf::Keyboard::isKeyPressed(sf::Keyboard::Space))
         { reset(); resetNums(); while(sf::Keyboard::isKeyPressed(sf::Keyboard::Space)){} }
 
+        draw = false;
         launchBots;
         waitBots;
         if(draw)
         {
-            scale = 1;
-            ox = 0;
-            oy = 0;
-            sprite.setOrigin(ox, oy);
-            sprite.setPosition(ox, oy);
+            sprite.setOrigin(0, 0);
+            sprite.setPosition(0, 0);
             sprite.setScale(1,1);
             drawPixels;
         }
