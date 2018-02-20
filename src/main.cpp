@@ -1,8 +1,9 @@
 #include <SFML/Graphics.hpp>
 #include <gmp.h>
 
-const unsigned int w = 640, h = 480;
-const unsigned int p = 128;
+const unsigned int w = 320, h = 240;
+const unsigned int p = 1024;
+double scale = 1;
 
 static mpf_t x, y, zoom, bail;
 
@@ -17,7 +18,6 @@ struct pixel
 {
     unsigned int iteration;
     bool done; mpf_t cr, ci, zr, zi;
-
     pixel()
     {
         iteration = 0; done = false;
@@ -35,7 +35,6 @@ void resetNums()
 {
     mpf_t ratio, xStart, tXIter, tYIter, xIter, yIter, py, px;
     mpf_init2(ratio, p); mpf_init2(xStart, p); mpf_init2(tXIter, p); mpf_init2(tYIter, p); mpf_init2(xIter, p); mpf_init2(yIter, p); mpf_init2(py, p); mpf_init2(px, p);
-
     mpf_set_d(ratio, ((double)app.getSize().x)/((double)app.getSize().y));
     mpf_sub(xStart, x, zoom);
     mpf_mul_ui(xIter, ratio, 2); mpf_mul(xIter, xIter, zoom); mpf_div_ui(xIter, xIter, w);
@@ -65,10 +64,8 @@ void resetNums()
 void iterate(pixel &temp)
 {
     if(temp.done) { return; }
-
     mpf_t sqzr, sqzi, comp;
     mpf_init2(sqzr, p); mpf_init2(sqzi, p); mpf_init2(comp, p);
-
     mpf_mul(sqzr, temp.zr, temp.zr);    /// sqzr = zr*zr
     mpf_mul(sqzi, temp.zi, temp.zi);    /// sqzi = zi*zi
     mpf_mul(temp.zi, temp.zr, temp.zi); /// zi = 2*zr*zi + ci
@@ -79,10 +76,8 @@ void iterate(pixel &temp)
     mpf_mul(sqzr, temp.zr, temp.zr); /// sqzr = zr*zr
     mpf_mul(sqzi, temp.zi, temp.zi); /// sqzi = zi*zi
     mpf_add(comp, sqzr, sqzi); /// Adding squares for compairison
-
     if(mpf_cmp(comp, bail) > 0) { temp.done = true; }
     else { temp.iteration++; }
-
     mpf_clear(sqzr); mpf_clear(sqzi); mpf_clear(comp);
 }
 
@@ -91,13 +86,14 @@ void drawFract(const unsigned int threadNum)
     const unsigned int max = (pixelC / 16) * (1 + threadNum);
     for(unsigned int pix = (pixelC / 16) * threadNum; pix < max; pix++)
     {
-        iterate(nums[pix]);
-
+        iterate(nums[pix]); iterate(nums[pix]);
+        iterate(nums[pix]); iterate(nums[pix]);
+        iterate(nums[pix]); iterate(nums[pix]);
+        iterate(nums[pix]); iterate(nums[pix]);
         const unsigned int counter = pix << 2;
         if(nums[pix].done)
         {
             if(!draw) { draw = true; }
-
             const unsigned long ii = nums[pix].iteration%colors;
             pixels[counter + 0] = r[ii];
             pixels[counter + 1] = g[ii];
@@ -120,17 +116,14 @@ void reset(){ mpf_set_d(x,-1.5); mpf_set_d(y,0); mpf_set_d(zoom,2); }
 int main()
 {
     mpf_init2(bail, p);
-    mpf_set_ui(bail, 256);
-
+    mpf_set_ui(bail, 4);
     mpf_init2(x, p);
     mpf_init2(y, p);
     mpf_init2(zoom, p);
-
     sf::Texture texture;
     texture.create(w,h);
     texture.setSmooth(true);
     sf::Sprite sprite(texture);
-
     sf::Thread  bot0(drawFract,0), bot1(drawFract,1),
                 bot2(drawFract,2), bot3(drawFract,3),
                 bot4(drawFract,4), bot5(drawFract,5),
@@ -139,10 +132,8 @@ int main()
                 bot10(drawFract,10), bot11(drawFract,11),
                 bot12(drawFract,12), bot13(drawFract,13),
                 bot14(drawFract,14), bot15(drawFract,15);
-
     reset();
     resetNums();
-
     while (app.isOpen())
     {
         sf::Event event;
@@ -151,7 +142,6 @@ int main()
             if (event.type == sf::Event::Closed)
                 app.close();
         }
-
         if(sf::Mouse::isButtonPressed(sf::Mouse::Left))
         {
             mpf_t modx, mody;
@@ -174,16 +164,14 @@ int main()
             mpf_mul(modx, modx, ratio);
             mpf_set_ui(mody, h);
             mpf_div_ui(mody, mody, 2);
-
             sprite.setOrigin(mpf_get_d(tx), mpf_get_d(ty));
             sprite.setPosition(mpf_get_d(tx), mpf_get_d(ty));
-
             mpf_sub(tx, tx, modx); mpf_sub(ty, ty, mody);
             mpf_mul(tx, tx, zoom); mpf_mul(ty, ty, zoom);
             mpf_div(tx, tx, modx); mpf_div(ty, ty, mody);
             if(sf::Keyboard::isKeyPressed(sf::Keyboard::LShift))
             {
-                sprite.setScale(0.25,0.25);
+                scale *= 0.25;
                 mpf_set_d(zmod, -3);
                 mpf_mul(tx,tx,zmod);
                 mpf_mul(ty,ty,zmod);
@@ -192,40 +180,36 @@ int main()
                 mpf_mul_ui(zoom, zoom, 4);
             } else
             {
-                sprite.setScale(4,4);
+                scale *= 4;
                 mpf_set_d(zmod, 3.f/4.f);
                 mpf_mul(tx,tx,zmod);
                 mpf_mul(ty,ty,zmod);
                 mpf_add(x,x,tx);
                 mpf_add(y,y,ty);
                 mpf_div_ui(zoom, zoom, 4);
-            }
-            draw = false;
+            } sprite.setScale(scale,scale);
             mpf_clear(modx); mpf_clear(mody);
             mpf_clear(zmod); mpf_clear(tx); mpf_clear(ty);
             mpf_clear(wRatio); mpf_clear(hRatio);
             mpf_clear(ratio);
-
             app.clear();
             app.draw(sprite);
             app.display();
-
             resetNums();
         }
         if(sf::Keyboard::isKeyPressed(sf::Keyboard::Space))
         { reset(); resetNums(); while(sf::Keyboard::isKeyPressed(sf::Keyboard::Space)){} }
-
         draw = false;
         launchBots;
         waitBots;
         if(draw)
         {
+            scale = 1;
             sprite.setOrigin(0, 0);
             sprite.setPosition(0, 0);
             sprite.setScale(1,1);
             drawPixels;
         }
     }
-
     return EXIT_SUCCESS;
 }
