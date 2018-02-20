@@ -88,8 +88,6 @@ void drawFract(const unsigned int threadNum)
     {
         iterate(nums[pix]); iterate(nums[pix]);
         iterate(nums[pix]); iterate(nums[pix]);
-        iterate(nums[pix]); iterate(nums[pix]);
-        iterate(nums[pix]); iterate(nums[pix]);
         const unsigned int counter = pix << 2;
         if(nums[pix].done)
         {
