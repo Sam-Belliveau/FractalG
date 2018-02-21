@@ -1,8 +1,9 @@
 #include <SFML/Graphics.hpp>
 #include <gmp.h>
 
-const unsigned int w = 320, h = 240;
-const unsigned int p = 1024;
+const unsigned int w = 640, h = 480;
+const unsigned int p = 1 << 8;
+unsigned int bailPow = 2;
 double scale = 1;
 
 static mpf_t x, y, zoom, bail;
@@ -53,7 +54,7 @@ void resetNums()
             mpf_set(nums[i].zr, px); mpf_set(nums[i].zi, py);
             nums[i].iteration = 0; nums[i].done = false;
             pixels[i*4 + 0] = 0; pixels[i*4 + 1] = 0;
-            pixels[i*4 + 2] = 0; pixels[i*4 + 3] = 16;
+            pixels[i*4 + 2] = 0; pixels[i*4 + 3] = 64;
             mpf_add(px, px, xIter); i++;
         } mpf_add(py, py, yIter);
     }
@@ -68,23 +69,21 @@ void iterate(pixel &temp)
     mpf_init2(sqzr, p); mpf_init2(sqzi, p); mpf_init2(comp, p);
     mpf_mul(sqzr, temp.zr, temp.zr);    /// sqzr = zr*zr
     mpf_mul(sqzi, temp.zi, temp.zi);    /// sqzi = zi*zi
+    mpf_add(comp, sqzr, sqzi); /// Adding squares for compairison
+    if(mpf_cmp(comp, bail) > 0) { temp.done = true; return;}
     mpf_mul(temp.zi, temp.zr, temp.zi); /// zi = 2*zr*zi + ci
     mpf_add(temp.zi, temp.zi, temp.zi); /// |
     mpf_add(temp.zi, temp.zi, temp.ci); /// |
     mpf_sub(temp.zr, sqzr, sqzi);       /// zr = cr + sqzr - sqzi
     mpf_add(temp.zr, temp.zr, temp.cr); /// |
-    mpf_mul(sqzr, temp.zr, temp.zr); /// sqzr = zr*zr
-    mpf_mul(sqzi, temp.zi, temp.zi); /// sqzi = zi*zi
-    mpf_add(comp, sqzr, sqzi); /// Adding squares for compairison
-    if(mpf_cmp(comp, bail) > 0) { temp.done = true; }
-    else { temp.iteration++; }
+    temp.iteration++;
     mpf_clear(sqzr); mpf_clear(sqzi); mpf_clear(comp);
 }
 
 void drawFract(const unsigned int threadNum)
 {
-    const unsigned int max = (pixelC / 16) * (1 + threadNum);
-    for(unsigned int pix = (pixelC / 16) * threadNum; pix < max; pix++)
+    const unsigned int max = (pixelC / 8) * (1 + threadNum);
+    for(unsigned int pix = (pixelC / 8) * threadNum; pix < max; pix++)
     {
         iterate(nums[pix]); iterate(nums[pix]);
         iterate(nums[pix]); iterate(nums[pix]);
@@ -105,16 +104,12 @@ void drawFract(const unsigned int threadNum)
 void reset(){ mpf_set_d(x,-1.5); mpf_set_d(y,0); mpf_set_d(zoom,2); }
 
 #define drawPixels; texture.update(pixels); app.draw(sprite); app.display();
-
-#define launchBots; bot0.launch(); bot1.launch(); bot2.launch(); bot3.launch(); bot4.launch(); bot5.launch(); bot6.launch(); bot7.launch(); \
-                    bot8.launch(); bot9.launch(); bot10.launch(); bot11.launch(); bot12.launch(); bot13.launch(); bot14.launch(); bot15.launch();
-
-#define waitBots; bot0.wait(); bot1.wait(); bot2.wait(); bot3.wait(); bot4.wait(); bot5.wait(); bot6.wait(); bot7.wait(); \
-                  bot8.wait(); bot9.wait(); bot10.wait(); bot11.wait(); bot12.wait(); bot13.wait(); bot14.wait(); bot15.wait();
+#define launchBots; bot0.launch(); bot1.launch(); bot2.launch(); bot3.launch(); bot4.launch(); bot5.launch(); bot6.launch(); bot7.launch();
+#define waitBots; bot0.wait(); bot1.wait(); bot2.wait(); bot3.wait(); bot4.wait(); bot5.wait(); bot6.wait(); bot7.wait();
 int main()
 {
     mpf_init2(bail, p);
-    mpf_set_ui(bail, 4);
+    mpf_set_ui(bail, (1 << bailPow));
     mpf_init2(x, p);
     mpf_init2(y, p);
     mpf_init2(zoom, p);
@@ -125,11 +120,7 @@ int main()
     sf::Thread  bot0(drawFract,0), bot1(drawFract,1),
                 bot2(drawFract,2), bot3(drawFract,3),
                 bot4(drawFract,4), bot5(drawFract,5),
-                bot6(drawFract,6), bot7(drawFract,7),
-                bot8(drawFract,8), bot9(drawFract,9),
-                bot10(drawFract,10), bot11(drawFract,11),
-                bot12(drawFract,12), bot13(drawFract,13),
-                bot14(drawFract,14), bot15(drawFract,15);
+                bot6(drawFract,6), bot7(drawFract,7);
     reset();
     resetNums();
     while (app.isOpen())
@@ -142,6 +133,7 @@ int main()
         }
         if(sf::Mouse::isButtonPressed(sf::Mouse::Left))
         {
+            /** Handels Mouse Stuff**/
             mpf_t modx, mody;
             mpf_t zmod;
             mpf_t tx, ty;
@@ -195,13 +187,19 @@ int main()
             app.display();
             resetNums();
         }
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
+        { bailPow++; mpf_set_ui(bail, (1 << bailPow)); resetNums(); while(sf::Keyboard::isKeyPressed(sf::Keyboard::Up)){} }
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Down) && bailPow > 1)
+        { bailPow--; mpf_set_ui(bail, (1 << bailPow)); resetNums(); while(sf::Keyboard::isKeyPressed(sf::Keyboard::Down)){} }
         if(sf::Keyboard::isKeyPressed(sf::Keyboard::Space))
         { reset(); resetNums(); while(sf::Keyboard::isKeyPressed(sf::Keyboard::Space)){} }
+
         draw = false;
         launchBots;
         waitBots;
+
         if(draw)
-        {
+        { /// RESET
             scale = 1;
             sprite.setOrigin(0, 0);
             sprite.setPosition(0, 0);
